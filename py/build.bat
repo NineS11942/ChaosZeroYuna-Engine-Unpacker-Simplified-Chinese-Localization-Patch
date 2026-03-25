@@ -21,7 +21,7 @@ echo      Done.
 echo.
 
 echo [2/3] Building exe with Nuitka (may take a few minutes)...
-python -m nuitka --onefile --enable-plugin=tk-inter --include-package-data=customtkinter --include-data-files=rebuild_ko_to_zht.py=rebuild_ko_to_zht.py --include-data-files=unpack_data.py=unpack_data.py --output-dir=dist --output-filename=ChaosZero-Toolkit.exe chaoszero_toolkit_gui.py
+python -m nuitka --onefile --onefile-no-compression --enable-plugin=tk-inter --include-package-data=customtkinter --include-data-files=rebuild_ko_to_zht.py=rebuild_ko_to_zht.py --include-data-files=unpack_data.py=unpack_data.py --output-dir=dist --output-filename=ChaosZero-Toolkit.exe chaoszero_toolkit_gui.py
 
 if %errorlevel% neq 0 (
     echo.

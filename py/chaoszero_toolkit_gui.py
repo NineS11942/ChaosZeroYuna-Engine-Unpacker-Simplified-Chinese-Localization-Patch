@@ -86,13 +86,7 @@ class ChaosZeroToolkit(ctk.CTk):
         )
         title_label.pack(side="left", padx=20, pady=15)
 
-        subtitle = ctk.CTkLabel(
-            title_frame,
-            text="卡俄斯：噩梦 — data.pack 解包 / 汉化工具",
-            font=ctk.CTkFont(family=GLOBAL_FONT[0], size=13),
-            text_color=COLOR_TEXT_DIM
-        )
-        subtitle.pack(side="left", padx=10, pady=15)
+
 
         version_label = ctk.CTkLabel(
             title_frame,
@@ -105,12 +99,22 @@ class ChaosZeroToolkit(ctk.CTk):
         qq_label = ctk.CTkLabel(
             title_frame,
             text="💬 QQ群: 777529227",
-            font=ctk.CTkFont(family=GLOBAL_FONT[0], size=12),
-            text_color=COLOR_TEXT_DIM,
+            font=ctk.CTkFont(family=GLOBAL_FONT[0], size=13),
+            text_color="#FFFFFF",
             cursor="hand2"
         )
         qq_label.pack(side="right", padx=8, pady=15)
         qq_label.bind("<Button-1>", lambda e: self._copy_to_clipboard("777529227"))
+
+        github_label = ctk.CTkLabel(
+            title_frame,
+            text="⭐ GitHub 项目地址（如果觉得好用 请给我点个Star吧）",
+            font=ctk.CTkFont(family=GLOBAL_FONT[0], size=13, weight="bold"),
+            text_color="#FFFFFF",
+            cursor="hand2"
+        )
+        github_label.pack(side="right", padx=8, pady=15)
+        github_label.bind("<Button-1>", lambda e: self._open_url("https://github.com/NineS11942/ChaosZeroYuna-Engine-Unpacker-Simplified-Chinese-Localization-Patch"))
 
         # ── 主内容区 ──
         main_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -381,6 +385,10 @@ class ChaosZeroToolkit(ctk.CTk):
         self.clipboard_clear()
         self.clipboard_append(text)
         self._log_line(f"已复制: {text}", "ok")
+
+    def _open_url(self, url):
+        import webbrowser
+        webbrowser.open(url)
 
     # ═══════════════════════════════════════════════════════════════
     # 进度更新
