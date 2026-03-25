@@ -6,8 +6,8 @@
 
 ## 📸 效果预览
 
-> 汉化效果截图（待添加）
-![alt text](image.png)
+![汉化效果](images/image.png)
+![游戏内截图](images/screenshot.png)
 ---
 
 ## 🚀 普通用户（一键汉化）

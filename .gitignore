@@ -4,6 +4,8 @@ dist/
 *.dist/
 *.onefile-build/
 nuitka-crash-report.xml
+*.exe
+*.zip
 
 # Python
 __pycache__/
