@@ -1,13 +1,15 @@
 # ⚔ ChaosZero-Toolkit
 
-**卡俄斯：噩梦 (ChaosZero Nightmare)** — data.pack 解包工具 & 简体中文汉化补丁
+**卡俄斯梦境(ChaosZero Nightmare)** — data.pack 解包工具 & 简体中文汉化补丁
 
 ---
 
 ## 📸 效果预览
 
+> 汉化效果截图
 ![汉化效果](images/image.png)
 ![游戏内截图](images/screenshot.png)
+
 ---
 
 ## 🚀 普通用户（一键汉化）
@@ -19,7 +21,7 @@
 
 ### 使用方法
 
-1. 将 `ChaosZero-Toolkit.exe` 和 `text_ko_text.tsv` 放在**同一文件夹**
+1. 下载Zip文件 然后解压 
 2. 双击运行 `ChaosZero-Toolkit.exe`
 3. 点击 **「🔍 自动寻找」** 自动定位游戏目录（或手动浏览选择）
 4. 点击 **「🚀 开始汉化 / 构建封包」**
