@@ -35,6 +35,11 @@ GAME_EXE_NAME     = "ssr-stove-shield.exe"
 GAME_FOLDER_NAME  = "ChaosZeroNightmare"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# PyInstaller 打包后，exe 实际运行目录（而非临时解压目录）
+if getattr(sys, 'frozen', False):
+    EXE_DIR = os.path.dirname(sys.executable)
+else:
+    EXE_DIR = SCRIPT_DIR
 
 
 class LogRedirector:
@@ -565,11 +570,11 @@ class ChaosZeroToolkit(ctk.CTk):
             self._set_status("zht", "⚠ 未下载", False)
             self._log_line("ZHT 语言包未下载，可切换替换 KO (韩文) 版本", "warn")
 
-        # 4. 检查 TSV 翻译文件
-        tsv_path = os.path.join(SCRIPT_DIR, "text_ko_text.tsv")
+        # 4. 检查 TSV 翻译文件（优先从 exe 所在目录查找）
+        tsv_path = os.path.join(EXE_DIR, "text_ko_text.tsv")
         if not os.path.exists(tsv_path):
-            # 也检查 G:\keasi\ 原始位置
-            tsv_path_alt = r"G:\keasi\text_ko_text.tsv"
+            # 回退到脚本目录
+            tsv_path_alt = os.path.join(SCRIPT_DIR, "text_ko_text.tsv")
             if os.path.exists(tsv_path_alt):
                 tsv_path = tsv_path_alt
 
