@@ -1,0 +1,19 @@
+# Build artifacts
+dist/
+*.build/
+*.dist/
+*.onefile-build/
+nuitka-crash-report.xml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Game data
+*.pack
+*.pack~*
+*.plpck
+bin/
+bin_full_rebuild/
+bin_rebuilt/
