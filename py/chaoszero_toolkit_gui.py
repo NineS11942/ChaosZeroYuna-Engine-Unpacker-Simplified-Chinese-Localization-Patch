@@ -35,9 +35,10 @@ GAME_EXE_NAME     = "ssr-stove-shield.exe"
 GAME_FOLDER_NAME  = "ChaosZeroNightmare"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# PyInstaller 打包后，exe 实际运行目录（而非临时解压目录）
-if getattr(sys, 'frozen', False):
-    EXE_DIR = os.path.dirname(sys.executable)
+# 打包后，exe 实际运行目录（而非临时解压目录）
+# Nuitka: __nuitka_binary_dir 或 __compiled__；PyInstaller: sys.frozen
+if "__compiled__" in dir() or hasattr(sys, 'frozen'):
+    EXE_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
 else:
     EXE_DIR = SCRIPT_DIR
 
