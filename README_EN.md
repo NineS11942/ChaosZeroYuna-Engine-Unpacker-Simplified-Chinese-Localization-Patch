@@ -11,7 +11,9 @@
 
 ## 📸 Preview
 
-![Localization Preview](image.png)
+> Localization Screenshots
+![Localization Preview](images/image.png)
+![In-game Screenshot](images/screenshot.png)
 
 ---
 
@@ -38,7 +40,7 @@ From the [Releases](../../releases) page:
 
 ### Usage
 
-1. Place `ChaosZero-Toolkit.exe` and `text_ko_text.tsv` in the **same folder**
+1. Download the Zip file and extract it
 2. Run `ChaosZero-Toolkit.exe`
 3. Click **"🔍 Auto Find"** to locate your game directory (or browse manually)
 4. Click **"🚀 Start Localization"**
@@ -60,25 +62,25 @@ From the [Releases](../../releases) page:
 
 | File | Description |
 |------|-------------|
-| `chaoszero_toolkit_gui.py` | GUI interface (CustomTkinter) |
-| `rebuild_ko_to_zht.py` | Core: Extract → Translate → Rebuild data.pack |
-| `unpack_data.py` | Core: Decrypt and extract all resources from data.pack |
-| `text_ko_text.tsv` | Chinese translation database |
+| `py/chaoszero_toolkit_gui.py` | GUI interface (CustomTkinter) |
+| `py/rebuild_ko_to_zht.py` | Core: Extract → Translate → Rebuild data.pack |
+| `py/unpack_data.py` | Core: Decrypt and extract all resources from data.pack |
+| `py/text_ko_text.tsv` | Chinese translation database |
 
 ### CLI Usage
 
 ```bash
 # GUI mode
-python chaoszero_toolkit_gui.py
+python py/chaoszero_toolkit_gui.py
 
 # Unpack (CLI)
-python unpack_data.py -d "GameDir/appdata/cznlive" -o ./unpacked
+python py/unpack_data.py -d "GameDir/appdata/cznlive" -o ./unpacked
 
 # List files only
-python unpack_data.py --list
+python py/unpack_data.py --list
 
 # Filter extraction
-python unpack_data.py --filter "text/"
+python py/unpack_data.py --filter "text/"
 ```
 
 ---

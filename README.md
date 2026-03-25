@@ -43,25 +43,25 @@
 
 | 文件 | 功能 |
 |------|------|
-| `chaoszero_toolkit_gui.py` | GUI 界面（CustomTkinter） |
-| `rebuild_ko_to_zht.py` | 封包核心：提取 → 翻译 → 重建 data.pack |
-| `unpack_data.py` | 解包核心：解密 data.pack 并提取全部资源 |
-| `text_ko_text.tsv` | 中文翻译文本库 |
+| `py/chaoszero_toolkit_gui.py` | GUI 界面（CustomTkinter） |
+| `py/rebuild_ko_to_zht.py` | 封包核心：提取 → 翻译 → 重建 data.pack |
+| `py/unpack_data.py` | 解包核心：解密 data.pack 并提取全部资源 |
+| `py/text_ko_text.tsv` | 中文翻译文本库 |
 
 ### 直接运行
 
 ```bash
 # GUI 模式
-python chaoszero_toolkit_gui.py
+python py/chaoszero_toolkit_gui.py
 
 # 命令行解包
-python unpack_data.py -d "游戏目录/appdata/cznlive" -o ./unpacked
+python py/unpack_data.py -d "游戏目录/appdata/cznlive" -o ./unpacked
 
 # 命令行解包（仅列出文件）
-python unpack_data.py --list
+python py/unpack_data.py --list
 
 # 命令行解包（按过滤词提取）
-python unpack_data.py --filter "text/"
+python py/unpack_data.py --filter "text/"
 ```
 
 ---
