@@ -5,6 +5,9 @@ dist/
 *.onefile-build/
 nuitka-crash-report.xml
 push.bat
+release.bat
+release.ps1
+ChaosZero-Toolkit-release.zip
 
 # Python
 __pycache__/
