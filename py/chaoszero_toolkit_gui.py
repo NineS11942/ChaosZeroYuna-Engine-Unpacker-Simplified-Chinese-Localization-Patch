@@ -254,6 +254,16 @@ class ChaosZeroToolkit(ctk.CTk):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.pack(fill="x", pady=(0, 8))
 
+        self.use_simplified_var = ctk.BooleanVar(value=False)
+        self.use_simplified_cb = ctk.CTkCheckBox(
+            frame,
+            text="纯繁转简(无改动)",
+            variable=self.use_simplified_var,
+            font=ctk.CTkFont(family=GLOBAL_FONT[0], size=13),
+            text_color=COLOR_TEXT
+        )
+        self.use_simplified_cb.pack(side="top", anchor="w", padx=(5, 0), pady=(0, 10))
+
         self.start_btn = ctk.CTkButton(
             frame,
             text="🚀 开始汉化 / 构建封包",
@@ -716,7 +726,14 @@ class ChaosZeroToolkit(ctk.CTk):
 
             # 重写配置
             rebuild.PACK_DIR = self.pack_dir
-            rebuild.TSV_PATH = self.tsv_path
+            if getattr(self, 'use_simplified_var', None) and self.use_simplified_var.get():
+                simple_tsv = os.path.join(EXE_DIR, "text_ko_text(纯繁转简).tsv")
+                if not os.path.exists(simple_tsv):
+                    simple_tsv = os.path.join(SCRIPT_DIR, "text_ko_text(纯繁转简).tsv")
+                rebuild.TSV_PATH = simple_tsv
+                self._log_line(f"已启用纯繁转简，使用字典包: {os.path.basename(simple_tsv)}", "info")
+            else:
+                rebuild.TSV_PATH = self.tsv_path
 
             # 输出目录：在 pack 同级创建 backup 并直接覆盖
             output_dir = os.path.join(SCRIPT_DIR, "bin_full_rebuild")
