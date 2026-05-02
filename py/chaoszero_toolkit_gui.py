@@ -254,19 +254,58 @@ class ChaosZeroToolkit(ctk.CTk):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.pack(fill="x", pady=(0, 8))
 
+        options_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        options_frame.pack(side="top", fill="x", pady=(0, 10))
+
+        left_options = ctk.CTkFrame(options_frame, fg_color="transparent")
+        left_options.pack(side="left", fill="y")
+
+        right_options = ctk.CTkFrame(options_frame, fg_color="transparent")
+        right_options.pack(side="right", fill="y")
+
         self.use_simplified_var = ctk.BooleanVar(value=False)
         self.use_simplified_cb = ctk.CTkCheckBox(
-            frame,
-            text="纯繁转简(无改动)",
+            left_options,
+            text="纯繁转简",
             variable=self.use_simplified_var,
             font=ctk.CTkFont(family=GLOBAL_FONT[0], size=13),
             text_color=COLOR_TEXT
         )
-        self.use_simplified_cb.pack(side="top", anchor="w", padx=(5, 0), pady=(0, 10))
+        self.use_simplified_cb.pack(side="left", anchor="w", padx=(2, 5))
+
+        self.use_local_zht_var = ctk.BooleanVar(value=False)
+        self.use_local_zht_cb = ctk.CTkCheckBox(
+            left_options,
+            text="用本地 (用本地的tsv文件构建 一般无特殊用途不用勾选)",
+            variable=self.use_local_zht_var,
+            font=ctk.CTkFont(family=GLOBAL_FONT[0], size=13),
+            text_color=COLOR_TEXT
+        )
+        self.use_local_zht_cb.pack(side="left", anchor="w", padx=(2, 10))
+
+        self.apply_translation_var = ctk.BooleanVar(value=True)
+        self.apply_translation_cb = ctk.CTkCheckBox(
+            right_options,
+            text="汉化",
+            variable=self.apply_translation_var,
+            font=ctk.CTkFont(family=GLOBAL_FONT[0], size=13),
+            text_color=COLOR_TEXT
+        )
+        self.apply_translation_cb.pack(side="left", anchor="w", padx=(10, 5))
+
+        self.inject_init_js_var = ctk.BooleanVar(value=True)
+        self.inject_init_js_cb = ctk.CTkCheckBox(
+            right_options,
+            text="注入变速和动画跳过",
+            variable=self.inject_init_js_var,
+            font=ctk.CTkFont(family=GLOBAL_FONT[0], size=13),
+            text_color=COLOR_TEXT
+        )
+        self.inject_init_js_cb.pack(side="left", anchor="w", padx=(5, 0))
 
         self.start_btn = ctk.CTkButton(
             frame,
-            text="🚀 开始汉化 / 构建封包",
+            text="🚀 构建封包",
             height=44,
             corner_radius=8,
             fg_color=COLOR_ACCENT,
@@ -577,9 +616,17 @@ class ChaosZeroToolkit(ctk.CTk):
         if self.has_zht:
             self._set_status("zht", "✅ 已下载", True)
             self._log_line("ZHT (繁体中文) 语言包已存在于 data.pack 中", "ok")
+            if hasattr(self, 'use_simplified_cb'):
+                self.use_simplified_cb.configure(state="normal")
+                self.use_local_zht_cb.configure(state="normal")
         else:
             self._set_status("zht", "⚠ 未下载", False)
             self._log_line("ZHT 语言包未下载，可切换替换 KO (韩文) 版本", "warn")
+            if hasattr(self, 'use_simplified_cb'):
+                self.use_simplified_cb.configure(state="disabled")
+                self.use_simplified_var.set(False)
+                self.use_local_zht_cb.configure(state="disabled")
+                self.use_local_zht_var.set(False)
 
         # 4. 检查 TSV 翻译文件（优先从 exe 所在目录查找）
         tsv_path = os.path.join(EXE_DIR, "text_ko_text.tsv")
@@ -706,130 +753,181 @@ class ChaosZeroToolkit(ctk.CTk):
         self._log_line("正在停止...", "warn")
 
     def _run_translation(self):
-        """后台线程：执行解包→翻译→重新打包。"""
+        """后台线程：执行解包→翻译/注入→重新打包。"""
         try:
             t0 = time.time()
             self._log_line("=" * 50)
-            self._log_line("开始汉化流程", "step")
+            self._log_line("开始流程", "step")
             self._log_line("=" * 50)
 
-            # 导入核心模块
-            sys.path.insert(0, SCRIPT_DIR)
             import importlib
-
-            # 动态导入 rebuild_ko_to_zht
-            self._log_line("加载核心模块...", "step")
-            self._set_progress(0.02, "加载核心模块")
-
+            sys.path.insert(0, SCRIPT_DIR)
             import rebuild_ko_to_zht as rebuild
+            import rebuild_bundle
             importlib.reload(rebuild)
+            importlib.reload(rebuild_bundle)
 
-            # 重写配置
-            rebuild.PACK_DIR = self.pack_dir
-            if getattr(self, 'use_simplified_var', None) and self.use_simplified_var.get():
-                simple_tsv = os.path.join(EXE_DIR, "text_ko_text(纯繁转简).tsv")
-                if not os.path.exists(simple_tsv):
-                    simple_tsv = os.path.join(SCRIPT_DIR, "text_ko_text(纯繁转简).tsv")
-                rebuild.TSV_PATH = simple_tsv
-                self._log_line(f"已启用纯繁转简，使用字典包: {os.path.basename(simple_tsv)}", "info")
-            else:
-                rebuild.TSV_PATH = self.tsv_path
-
-            # 输出目录：在 pack 同级创建 backup 并直接覆盖
             output_dir = os.path.join(SCRIPT_DIR, "bin_full_rebuild")
-            rebuild.OUTPUT_DIR = output_dir
+            os.makedirs(output_dir, exist_ok=True)
+            
+            apply_translation = getattr(self, 'apply_translation_var', None) and self.apply_translation_var.get()
+            inject_init_js = getattr(self, 'inject_init_js_var', None) and self.inject_init_js_var.get()
 
-            # ── Step 1: 提取全部文件 ──
-            if self._stop_requested:
-                raise InterruptedError("用户停止")
+            if not apply_translation and not inject_init_js:
+                self._log_line("未勾选任何操作，已完成。", "warn")
+                self._set_progress(1.0, "完成！")
+                return
 
-            self._log_line("Step 1/4: 从 data.pack 提取全部文件条目...", "step")
-            self._set_progress(0.05, "Step 1/4: 提取文件条目")
-
-            # 重定向 print 到 GUI
+            ok = True
+            replaced = 0
+            
             old_stdout = sys.stdout
             sys.stdout = LogRedirector(lambda t: self._log(t))
 
-            entries, orig_header, orig_ver5, hash_count = rebuild.extract_all_files(self.pack_dir)
+            # ==== 1. 汉化处理 ====
+            if apply_translation:
+                self._log_line(">>> 执行汉化: data.pack", "step")
+                rebuild.PACK_DIR = self.pack_dir
+                if getattr(self, 'use_simplified_var', None) and self.use_simplified_var.get():
+                    rebuild.T2S_MODE = True
+                    rebuild.LOCAL_ZHT_MODE = getattr(self, 'use_local_zht_var', None) and self.use_local_zht_var.get()
+                else:
+                    rebuild.T2S_MODE = False
+                    rebuild.LOCAL_ZHT_MODE = False
+                    rebuild.TSV_PATH = self.tsv_path
 
-            self._set_progress(0.30, f"Step 1 完成: {len(entries):,} 个文件")
-            self._log_line(f"提取完成: {len(entries):,} 个文件条目", "ok")
+                rebuild.OUTPUT_DIR = output_dir
 
-            # ── Step 2: KO→ZHT 翻译替换 ──
-            if self._stop_requested:
-                raise InterruptedError("用户停止")
+                if self._stop_requested: raise InterruptedError()
+                self._set_progress(0.1, "提取 data.pack...")
+                entries, orig_header, orig_ver5, hash_count = rebuild.extract_all_files(self.pack_dir)
 
-            self._log_line("Step 2/4: 解密 → 翻译替换 → 重新加密...", "step")
-            self._set_progress(0.35, "Step 2/4: 翻译替换")
+                if self._stop_requested: raise InterruptedError()
+                self._set_progress(0.3, "文本替换...")
+                if self.replace_mode == "ko":
+                    rebuild.ZHT_DB_KEY = rebuild.KO_DB_KEY
 
-            if self.replace_mode == "ko":
-                # 替换 KO 模式：将翻译后数据直接放入 KO 条目
-                rebuild.ZHT_DB_KEY = rebuild.KO_DB_KEY  # 目标也是 KO
+                if getattr(rebuild, 'T2S_MODE', False):
+                    zht_tsv_path = os.path.join(SCRIPT_DIR, "text_zht_text(纯繁转简).tsv") if getattr(rebuild, 'LOCAL_ZHT_MODE', False) else None
+                    if getattr(rebuild, 'LOCAL_ZHT_MODE', False) and not os.path.exists(zht_tsv_path):
+                        alt_path = os.path.join(EXE_DIR, "text_zht_text(纯繁转简).tsv")
+                        if os.path.exists(alt_path): zht_tsv_path = alt_path
+                    replaced = rebuild.process_zht_to_zhs(entries, tsv_path=zht_tsv_path)
+                else:
+                    replaced = rebuild.process_ko_to_zht(entries, self.tsv_path)
 
-            replaced = rebuild.process_ko_to_zht(entries, self.tsv_path)
-            self._set_progress(0.55, f"Step 2 完成: 替换 {replaced:,} 条")
-            self._log_line(f"翻译替换完成: {replaced:,} 条文本", "ok")
+                if self._stop_requested: raise InterruptedError()
+                self._set_progress(0.5, "重建 data.pack...")
+                rebuild.rebuild_and_write(entries, orig_header, orig_ver5, hash_count, output_dir)
+                
+                if self._stop_requested: raise InterruptedError()
+                self._set_progress(0.7, "验证 data.pack...")
+                if not rebuild.verify_pack(output_dir, entries):
+                    ok = False
+                    self._log_line("⚠ data.pack 验证发现问题", "warn")
 
-            # ── Step 3: 重建 Pack ──
-            if self._stop_requested:
-                raise InterruptedError("用户停止")
+            # ==== 2. 注入变速浮窗 ====
+            if inject_init_js and ok:
+                self._log_line(">>> 执行注入: bundle.pack", "step")
+                self._set_progress(0.8, "处理 bundle.pack...")
+                
+                bin_path = self.game_bin_path.get()
+                bundle_path = os.path.join(bin_path, "bundle.pack")
+                
+                # 查找 javascript 目录（优先 exe 同级，回退到脚本目录）
+                js_dir = os.path.join(EXE_DIR, "javascript")
+                if not os.path.isdir(js_dir):
+                    js_dir = os.path.join(SCRIPT_DIR, "javascript")
+                
+                # 需要替换的 JS 文件列表
+                js_replace_files = [
+                    "init.js",
+                    "title.js",
+                    "pre_data.js",
+                    "title_popups.js",
+                ]
+                
+                if os.path.exists(bundle_path) and os.path.isdir(js_dir):
+                    try:
+                        output_bundle = os.path.join(output_dir, "bundle.pack")
+                        pack_entries, header_38, ver_5, hash_count, trailing_data = rebuild_bundle.extract_entries_from_pack(bundle_path)
+                        
+                        # 替换所有修改过的 JS 文件
+                        for js_name in js_replace_files:
+                            js_key = "javascript/" + js_name
+                            js_path = os.path.join(js_dir, js_name)
+                            if not os.path.exists(js_path):
+                                self._log_line(f"跳过 {js_key}（文件不存在）", "warn")
+                                continue
+                            with open(js_path, 'rb') as f:
+                                js_data = f.read()
+                            
+                            replaced_js = False
+                            for entry in pack_entries:
+                                if entry['key'] == js_key.encode('utf-8'):
+                                    entry['value'] = js_data
+                                    replaced_js = True
+                                    self._log_line(f"替换 {js_key} ({len(js_data):,} bytes)", "ok")
+                                    break
+                            if not replaced_js:
+                                pack_entries.append({
+                                    'key': js_key.encode('utf-8'),
+                                    'value': js_data,
+                                    'flags': 2,
+                                    'meta': b'',
+                                })
+                                self._log_line(f"新增 {js_key}", "ok")
+                        
+                        # 清空所有 .jbin 字节码缓存（强制引擎加载 .js 源码）
+                        jbin_cleared = 0
+                        for entry in pack_entries:
+                            key_str = entry['key'].decode('utf-8', errors='replace')
+                            if key_str.endswith('.jbin'):
+                                entry['value'] = b''
+                                jbin_cleared += 1
+                        if jbin_cleared > 0:
+                            self._log_line(f"清空 {jbin_cleared} 个 .jbin 字节码缓存", "ok")
+                            
+                        self._log_line("生成新 bundle.pack...", "step")
+                        rebuild_bundle.build_bundle(pack_entries, header_38, ver_5, hash_count, output_bundle, trailing_data)
+                    except Exception as ex:
+                        self._log_line(f"❌ bundle.pack 注入失败: {ex}", "error")
+                        ok = False
+                else:
+                    self._log_line("❌ 找不到 bundle.pack 或 javascript 目录", "error")
+                    ok = False
 
-            self._log_line("Step 3/4: 流式重建 data.pack + 多卷写出...", "step")
-            self._set_progress(0.60, "Step 3/4: 重建 data.pack")
-
-            total_size = rebuild.rebuild_and_write(entries, orig_header, orig_ver5, hash_count, output_dir)
-            self._set_progress(0.85, f"Step 3 完成: {total_size/1024**3:.2f} GB")
-            self._log_line(f"重建完成: {total_size:,} 字节 ({total_size/1024**3:.2f} GB)", "ok")
-
-            # ── Step 4: 验证 ──
-            if self._stop_requested:
-                raise InterruptedError("用户停止")
-
-            self._log_line("Step 4/4: 验证重建的 data.pack...", "step")
-            self._set_progress(0.88, "Step 4/4: 验证")
-
-            ok = rebuild.verify_pack(output_dir, entries)
-
-            # 恢复 stdout
             sys.stdout = old_stdout
-
             elapsed = time.time() - t0
             self._set_progress(1.0, "完成！")
 
             if ok:
                 self._log_line("=" * 50)
-                self._log_line(f"✅ 汉化成功完成！耗时 {elapsed:.1f} 秒", "ok")
-                self._log_line(f"   替换文本: {replaced:,} 条", "ok")
+                self._log_line(f"✅ 操作成功完成！耗时 {elapsed:.1f} 秒", "ok")
                 self._log_line(f"   输出目录: {output_dir}", "ok")
                 self._log_line("=" * 50)
 
-                # 询问是否自动替换
-                import shutil
                 _output_dir = output_dir
-                _pack_dir = self.pack_dir
-                _replaced = replaced
-                _elapsed = elapsed
+                _pack_dir = self.pack_dir if apply_translation and not inject_init_js else self.game_bin_path.get()
+                if apply_translation and inject_init_js:
+                     # fallback to finding the common root: bin_path
+                     _pack_dir = self.game_bin_path.get()
 
                 def _ask_replace():
+                    from tkinter import messagebox
                     result = messagebox.askyesno(
-                        "汉化完成 ✅",
-                        f"汉化成功！\n\n"
-                        f"• 替换文本: {_replaced:,} 条\n"
-                        f"• 耗时: {_elapsed:.1f} 秒\n\n"
-                        f"是否自动将文件替换到游戏目录？\n"
-                        f"（原文件将备份为 .bak）\n\n"
-                        f"目标: {_pack_dir}"
+                        "操作完成 ✅",
+                        f"打包成功！\n\n"
+                        f"是否自动将所有修改的文件（data.pack / bundle.pack）\n"
+                        f"替换到游戏目录中？\n"
+                        f"（原文件将备份为 .bak）"
                     )
                     if result:
-                        self._auto_replace_pack(_output_dir, _pack_dir)
+                        self._auto_replace_pack(_output_dir, self.game_bin_path.get())
                     else:
-                        self._log_line(f"已跳过自动替换，请手动复制文件:", "info")
-                        self._log_line(f"  从: {_output_dir}", "info")
-                        self._log_line(f"  到: {_pack_dir}", "info")
+                        self._log_line(f"已跳过自动替换，请手动复制文件", "info")
 
                 self.after(0, _ask_replace)
-            else:
-                self._log_line("⚠ 验证发现问题，请检查日志", "warn")
 
         except InterruptedError:
             sys.stdout = old_stdout if 'old_stdout' in dir() else sys.__stdout__
@@ -837,69 +935,61 @@ class ChaosZeroToolkit(ctk.CTk):
             self._set_progress(0, "已停止")
 
         except Exception as e:
-            if 'old_stdout' in dir():
-                sys.stdout = old_stdout
-            else:
-                sys.stdout = sys.__stdout__
+            if 'old_stdout' in dir(): sys.stdout = old_stdout
+            else: sys.stdout = sys.__stdout__
             self._log_line(f"错误: {e}", "error")
+            import traceback
             self._log_line(traceback.format_exc())
             self._set_progress(0, "出错")
-            self.after(0, lambda: messagebox.showerror("错误", f"汉化过程出错:\n{e}"))
+            from tkinter import messagebox
+            self.after(0, lambda: messagebox.showerror("错误", f"处理过程出错:\n{e}"))
 
         finally:
             self.is_running = False
             self.after(0, lambda: self.start_btn.configure(state="normal"))
             self.after(0, lambda: self.stop_btn.configure(state="disabled"))
 
-    def _auto_replace_pack(self, output_dir, target_dir):
-        """将重建的 data.pack 文件替换到游戏目录，原文件备份为 .bak"""
+    def _auto_replace_pack(self, output_dir, bin_path):
+        """将重建的 pack 文件替换到游戏目录，原文件备份为 .bak"""
         import shutil
+        from tkinter import messagebox
         try:
             self._log_line("开始自动替换...", "step")
 
-            # 找到输出目录中的所有 data.pack* 文件
-            pack_files = [f for f in os.listdir(output_dir)
-                          if f.startswith("data.pack") and os.path.isfile(os.path.join(output_dir, f))]
+            pack_files = [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
 
             if not pack_files:
-                self._log_line("输出目录中未找到 data.pack 文件!", "error")
+                self._log_line("输出目录中未找到任何文件!", "error")
                 return
 
             self._log_line(f"  找到 {len(pack_files)} 个文件待替换", "info")
 
-            # 备份原文件
             for fname in pack_files:
-                target_file = os.path.join(target_dir, fname)
+                # Decide destination
+                if fname.startswith("data.pack"):
+                    target_file = os.path.join(bin_path, "appdata", "cznlive", fname)
+                elif fname.startswith("bundle.pack"):
+                    target_file = os.path.join(bin_path, fname)
+                else:
+                    target_file = os.path.join(bin_path, fname)
+
+                # Backup
                 if os.path.exists(target_file):
                     bak_file = target_file + ".bak"
-                    # 如果旧备份存在则跳过（避免覆盖首次备份）
                     if not os.path.exists(bak_file):
                         self._log_line(f"  备份: {fname} → {fname}.bak", "info")
                         shutil.copy2(target_file, bak_file)
                     else:
                         self._log_line(f"  备份已存在: {fname}.bak（跳过）", "info")
 
-            # 复制新文件
-            for fname in pack_files:
+                # Copy
                 src = os.path.join(output_dir, fname)
-                dst = os.path.join(target_dir, fname)
                 sz = os.path.getsize(src) / 1024 / 1024
                 self._log_line(f"  替换: {fname} ({sz:.0f} MB)", "step")
-                shutil.copy2(src, dst)
+                shutil.copy2(src, target_file)
 
             self._log_line(f"✅ 自动替换完成！共替换 {len(pack_files)} 个文件", "ok")
-            self._log_line(f"   游戏目录: {target_dir}", "ok")
-            self._log_line(f"   请进入游戏内切换字体即可体验中文", "ok")
-            self._log_line(f"   ⚠ 中文字体由于热更新，每次切换都需要重新打包；韩文不需要", "warn")
-            messagebox.showinfo(
-                "替换完成 ✅",
-                f"已成功替换 {len(pack_files)} 个文件！\n"
-                f"原文件已备份为 .bak\n\n"
-                f"请进入游戏内切换字体即可体验中文！\n\n"
-                f"⚠ 注意：中文字体由于热更新机制，\n"
-                f"每次游戏更新后都需要重新打包。\n"
-                f"韩文版本则不需要。"
-            )
+            messagebox.showinfo("替换完成 ✅", f"已成功替换 {len(pack_files)} 个文件！\n原文件已备份为 .bak")
 
         except Exception as e:
             self._log_line(f"自动替换失败: {e}", "error")

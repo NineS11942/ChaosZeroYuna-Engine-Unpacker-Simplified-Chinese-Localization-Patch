@@ -35,6 +35,9 @@ ZHT_DB_KEY  = b'text/zht/text.db'   # 繁体中文文本数据库（汉化目标
 # 单个分卷文件的最大大小（1 GB），与游戏原始分卷大小一致（不要修改）
 VOLUME_SIZE = 1073741824  # 1 GB per volume
 
+T2S_MODE = False
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # 密钥与加密
 # ═══════════════════════════════════════════════════════════════════════
@@ -436,6 +439,206 @@ def process_ko_to_zht(entries, tsv_path):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# STEP 2b: ZHT text.db → 自动利用 OpenCC 转换为 ZHS → 重建
+# ═══════════════════════════════════════════════════════════════════════
+def process_zht_to_zhs(entries, tsv_path=None):
+    """
+    读 ZHT text.db → 解密 → 解析内层 PLPcK → 使用 opencc 或本地 TSV 转换为简体中文 → 重建 → 加密
+    → 替换 ZHT text.db 条目的 value
+    """
+    use_tsv = False
+    converter = None
+    tsv_map = {}
+    
+    if tsv_path and os.path.exists(tsv_path):
+        import csv
+        with open(tsv_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f, delimiter='\t')
+            for row in reader:
+                if len(row) >= 2:
+                    tsv_map[row[0]] = row[1]
+        use_tsv = True
+        print(f"  ✅ 使用本地 TSV 文件: {tsv_path}, 加载了 {len(tsv_map):,} 条数据")
+    else:
+        import opencc
+        converter = opencc.OpenCC('t2s')
+        print("  ✅ 使用 OpenCC 动态转换")
+    
+    # 找 ZHT
+    zht_idx = None
+    for i, e in enumerate(entries):
+        if e.key == ZHT_DB_KEY: zht_idx = i
+    
+    if zht_idx is None:
+        print(f"  ❌ 未找到 {ZHT_DB_KEY.decode()}")
+        sys.exit(1)
+    
+    print(f"  ✅ ZHT entry[{zht_idx}]: value={len(entries[zht_idx].value):,} B")
+
+    # 1. 解密 ZHT 内层
+    zht_raw = entries[zht_idx].value
+    zht_inner_off = find_inner_xor_offset(zht_raw[:64])
+    if zht_inner_off is None:
+        print("  ❌ ZHT Inner XOR offset 检测失败!")
+        sys.exit(1)
+    print(f"  ZHT Inner XOR offset = {zht_inner_off}")
+
+    zht_decrypted = inner_xor_crypt(zht_raw, zht_inner_off)
+    assert zht_decrypted[:5] == b'PLPcK', f"ZHT 解密失败: {zht_decrypted[:5].hex()}"
+    print(f"  ✅ ZHT 解密成功, 大小 = {len(zht_decrypted):,}")
+
+    # 2. 解析内层 PLPcK
+    inner_hash_count = struct.unpack_from('<I', zht_decrypted, 21)[0]
+    inner_header_38 = zht_decrypted[:38]
+    inner_ver_5 = zht_decrypted[38:43]
+    
+    ht_start = 43
+    text_buckets = {}
+    total_parsed = 0
+
+    for bi in range(inner_hash_count):
+        off = ht_start + bi * 5
+        oh = zht_decrypted[off]
+        ol = struct.unpack_from('<I', zht_decrypted, off + 1)[0]
+        fo = ol + (oh << 32)
+        if fo == 0: continue
+
+        chain = fo
+        bucket_list = []
+        safety = 0
+        while chain > 0 and chain + 15 <= len(zht_decrypted) and safety < 5000:
+            safety += 1
+            ds = struct.unpack_from('<I', zht_decrypted, chain)[0]
+            flags = zht_decrypted[chain + 4]
+            kl = zht_decrypted[chain + 5]
+            vs = struct.unpack_from('<I', zht_decrypted, chain + 6)[0]
+            nh = zht_decrypted[chain + 10]
+            nl = struct.unpack_from('<I', zht_decrypted, chain + 11)[0]
+            cnext = nl + (nh << 32)
+
+            if ds == 0 or kl == 0: break
+
+            cdata_off = chain + 15
+            key_bytes = zht_decrypted[cdata_off:cdata_off + kl]
+            value_bytes = zht_decrypted[cdata_off + kl:cdata_off + kl + vs]
+
+            bucket_list.append(TextEntry(key_bytes, value_bytes, flags))
+            total_parsed += 1
+
+            if cnext == 0 or cnext == chain: break
+            chain = cnext
+
+        if bucket_list:
+            text_buckets[bi] = bucket_list
+
+    print(f"  内层解析: {total_parsed:,} 条目, {len(text_buckets):,} 非空桶")
+
+    # 3. 转换
+    replaced = 0; kept = 0; meta_count = 0
+    for bi, tent_list in text_buckets.items():
+        for tent in tent_list:
+            if tent.is_meta:
+                meta_count += 1
+                continue
+
+            val = tent.value_bytes
+            n1 = val.find(b'\x00')
+            if n1 < 0:
+                kept += 1
+                continue
+
+            text_id_bytes = val[:n1]
+            rest = val[n1+1:]
+            n2 = rest.find(b'\x00')
+            trailing = rest[n2:] if n2 >= 0 else b''
+
+            try:
+                if n2 >= 0:
+                    text_content_bytes = rest[:n2]
+                else:
+                    text_content_bytes = rest
+                    
+                text_content_str = text_content_bytes.decode('utf-8')
+                
+                if use_tsv:
+                    try:
+                        text_id_str = text_id_bytes.decode('utf-8')
+                    except:
+                        kept += 1
+                        continue
+
+                    if text_id_str in tsv_map:
+                        new_text_str = tsv_map[text_id_str]
+                    else:
+                        kept += 1
+                        continue
+                else:
+                    new_text_str = converter.convert(text_content_str)
+                    
+                new_text = new_text_str.encode('utf-8')
+                tent.value_bytes = text_id_bytes + b'\x00' + new_text + trailing
+                replaced += 1
+            except:
+                kept += 1
+                continue
+
+    print(f"  转换: {replaced:,}, 保持原样(解析失败): {kept:,}, 元数据: {meta_count:,}")
+
+    # 4. 重建内层 PLPcK
+    inner_chunks_start = 43 + inner_hash_count * 5
+    new_ht = bytearray(inner_hash_count * 5)
+    inner_chunk_buf = bytearray()
+
+    for bi in sorted(text_buckets.keys()):
+        tent_list = text_buckets[bi]
+        first_offset = inner_chunks_start + len(inner_chunk_buf)
+
+        ht_off = bi * 5
+        new_ht[ht_off] = (first_offset >> 32) & 0xFF
+        struct.pack_into('<I', new_ht, ht_off + 1, first_offset & 0xFFFFFFFF)
+
+        for i, tent in enumerate(tent_list):
+            kd = tent.key_bytes
+            vd = tent.value_bytes
+            kl = len(kd); vs = len(vd)
+            ds = kl + vs + 15
+
+            current = inner_chunks_start + len(inner_chunk_buf)
+            next_off = (current + 15 + kl + vs) if i < len(tent_list) - 1 else 0
+
+            hdr = bytearray(15)
+            struct.pack_into('<I', hdr, 0, ds)
+            hdr[4] = tent.flags
+            hdr[5] = kl & 0xFF
+            struct.pack_into('<I', hdr, 6, vs)
+            hdr[10] = (next_off >> 32) & 0xFF
+            struct.pack_into('<I', hdr, 11, next_off & 0xFFFFFFFF)
+
+            inner_chunk_buf.extend(hdr)
+            inner_chunk_buf.extend(kd)
+            inner_chunk_buf.extend(vd)
+
+    new_inner_plpck = bytearray()
+    new_inner_plpck.extend(inner_header_38)
+    new_inner_plpck.extend(inner_ver_5)
+    new_inner_plpck.extend(new_ht)
+    new_inner_plpck.extend(inner_chunk_buf)
+
+    assert new_inner_plpck[:5] == b'PLPcK'
+    print(f"  重建内层 PLPcK: {len(new_inner_plpck):,} 字节")
+
+    # 5. Inner XOR 加密
+    new_inner_offset = len(new_inner_plpck) % 256
+    encrypted_inner = inner_xor_crypt(bytes(new_inner_plpck), new_inner_offset)
+
+    # 6. 替换 ZHT 条目的 value
+    entries[zht_idx].value = encrypted_inner
+    print(f"  ✅ ZHT 条目已替换: {len(zht_raw):,} → {len(encrypted_inner):,} 字节")
+
+    return replaced
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # STEP 3: 流式重建 + 多卷写出
 # ═══════════════════════════════════════════════════════════════════════
 class StreamingPackWriter:
@@ -656,9 +859,20 @@ def main():
     entries, orig_header, orig_ver5, hash_count = extract_all_files(PACK_DIR)
 
     print("\n" + "=" * 70)
-    print("Step 2: KO text.db → TSV 翻译 → 重建 → 替换 ZHT 槽位")
-    print("=" * 70)
-    replaced = process_ko_to_zht(entries, TSV_PATH)
+    if T2S_MODE:
+        if getattr(sys.modules[__name__], 'LOCAL_ZHT_MODE', False):
+            print("Step 2: ZHT text.db → 本地 TSV 替换为 ZHS → 重建")
+            print("=" * 70)
+            zht_tsv_path = os.path.join(SCRIPT_DIR, "text_zht_text(纯繁转简).tsv")
+            replaced = process_zht_to_zhs(entries, tsv_path=zht_tsv_path)
+        else:
+            print("Step 2: ZHT text.db → OpenCC 转换为 ZHS → 重建")
+            print("=" * 70)
+            replaced = process_zht_to_zhs(entries)
+    else:
+        print("Step 2: KO text.db → TSV 翻译 → 重建 → 替换 ZHT 槽位")
+        print("=" * 70)
+        replaced = process_ko_to_zht(entries, TSV_PATH)
 
     print("\n" + "=" * 70)
     print("Step 3: 流式重建外层 PLPcK + Pack XOR + 多卷写出")
