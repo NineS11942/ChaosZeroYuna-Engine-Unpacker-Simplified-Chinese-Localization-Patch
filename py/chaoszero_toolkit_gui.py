@@ -283,7 +283,7 @@ class ChaosZeroToolkit(ctk.CTk):
         )
         self.use_local_zht_cb.pack(side="left", anchor="w", padx=(2, 10))
 
-        self.apply_translation_var = ctk.BooleanVar(value=True)
+        self.apply_translation_var = ctk.BooleanVar(value=False)
         self.apply_translation_cb = ctk.CTkCheckBox(
             right_options,
             text="汉化",
@@ -293,7 +293,7 @@ class ChaosZeroToolkit(ctk.CTk):
         )
         self.apply_translation_cb.pack(side="left", anchor="w", padx=(10, 5))
 
-        self.inject_init_js_var = ctk.BooleanVar(value=True)
+        self.inject_init_js_var = ctk.BooleanVar(value=False)
         self.inject_init_js_cb = ctk.CTkCheckBox(
             right_options,
             text="注入变速和动画跳过",
@@ -719,8 +719,9 @@ class ChaosZeroToolkit(ctk.CTk):
         if self.is_running:
             return
 
-        # ZHT 未下载的提示
-        if not self.has_zht:
+        # ZHT 未下载的提示（仅在勾选了汉化时才弹出）
+        apply_translation = getattr(self, 'apply_translation_var', None) and self.apply_translation_var.get()
+        if apply_translation and not self.has_zht:
             result = messagebox.askyesno(
                 "ZHT 语言包未检测到",
                 "检测到您尚未下载 ZHT（繁体中文）语言包。\n\n"
@@ -734,9 +735,11 @@ class ChaosZeroToolkit(ctk.CTk):
                 return
             self.replace_mode = "ko"
             self._log_line("模式：替换 KO (韩文) text.db → 中文", "step")
-        else:
+        elif apply_translation:
             self.replace_mode = "zht"
             self._log_line("模式：替换 ZHT (繁中) text.db → 简体中文", "step")
+        else:
+            self.replace_mode = None
 
         self.is_running = True
         self._stop_requested = False
