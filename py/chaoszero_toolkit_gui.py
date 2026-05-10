@@ -865,6 +865,15 @@ class ChaosZeroToolkit(ctk.CTk):
                             with open(js_path, 'rb') as f:
                                 js_data = f.read()
                             
+                            # 动态路径注入：替换 init.js 中的占位符为实际目录
+                            if js_name == "init.js":
+                                # EXE_DIR: 工具 exe 所在目录（用户的配置/日志写到这里）
+                                toolkit_dir = EXE_DIR.replace('\\', '\\\\').rstrip('\\\\') + '\\\\'
+                                js_text = js_data.decode('utf-8')
+                                js_text = js_text.replace('__TOOLKIT_DIR__', toolkit_dir)
+                                js_data = js_text.encode('utf-8')
+                                self._log_line(f"  路径注入: TOOLKIT_DIR={EXE_DIR}", "info")
+                            
                             replaced_js = False
                             for entry in pack_entries:
                                 if entry['key'] == js_key.encode('utf-8'):
